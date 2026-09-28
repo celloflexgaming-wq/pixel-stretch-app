@@ -5,81 +5,107 @@ from PIL import Image
 import io
 import tempfile
 import os
+import random
 
-# Maakt de website lekker breed
-st.set_page_config(page_title="Anton Repponen Effect", layout="wide")
+# Pagina layout op 'wide' voor een professionele look
+st.set_page_config(page_title="Anton Repponen Auto-Stretch", layout="wide")
 
-st.title("Anton Repponen: Full Time Stretch")
-st.write("Sleep een foto of video in het vlak. De hele afbeelding wordt in uitgesmeerde banen verdeeld!")
+st.title("Anton Repponen: AUTO Time Stretch")
+st.write("Upload je media. Gebruik de handmatige sliders óf laat het algoritme het perfecte abstracte effect voor je genereren.")
 
-# Het drag & drop vlak
-uploaded_file = st.file_uploader("", type=["jpg", "jpeg", "png", "mp4", "mov"])
+# 1. Geheugen (Session State) instellen voor de AUTO modus
+if 'auto_mode' not in st.session_state:
+    st.session_state.auto_mode = False
+if 'auto_blocks' not in st.session_state:
+    st.session_state.auto_blocks = 100
+if 'auto_seed' not in st.session_state:
+    st.session_state.auto_seed = 42
+
+uploaded_file = st.file_uploader("Upload een foto of video...", type=["jpg", "jpeg", "png", "mp4", "mov"])
+
+# --- KERN FUNCTIE VOOR 100% DEKKING ---
+def apply_repponen_stretch(img_array, num_blocks, seed):
+    # De seed zorgt ervoor dat de randomisatie consequent blijft (cruciaal voor video!)
+    np.random.seed(seed)
+    h, w = img_array.shape[:2]
+    stretch_array = img_array.copy()
+    
+    # We knippen de foto in horizontale banen
+    actual_blocks = min(num_blocks, h)
+    
+    if actual_blocks > 1:
+        y_splits = np.sort(np.random.choice(range(1, h), actual_blocks - 1, replace=False))
+        y_points = [0] + y_splits.tolist() + [h]
+    else:
+        y_points = [0, h]
+        
+    for i in range(len(y_points) - 1):
+        y_start = y_points[i]
+        y_end = y_points[i+1]
+        
+        # Kies een willekeurig punt op de X-as per baan
+        x_start = np.random.randint(0, w)
+        
+        # Bepaal willekeurig of deze specifieke baan naar links of naar rechts uitrekt
+        direction = np.random.choice(["left", "right"])
+        
+        # Pak de pixels
+        lijn_pixels = stretch_array[y_start:y_end, x_start:x_start+1]
+        
+        # Pas de stretch onzichtbaar toe tot aan de randen van het canvas
+        if direction == "right":
+            stretch_array[y_start:y_end, x_start:] = lijn_pixels
+        else:
+            stretch_array[y_start:y_end, :x_start] = lijn_pixels
+            
+    return stretch_array
 
 if uploaded_file is not None:
     is_video = uploaded_file.type.startswith('video')
     
-    # Sliders voor het blokken-effect
-    col1, col2 = st.columns(2)
+    # 2. De Gebruikersinterface (UI) in twee kolommen verdelen
+    col1, col2 = st.columns([1, 1])
+    
     with col1:
-        num_blocks = st.slider("Aantal horizontale banen (resolutie)", 10, 300, 80)
+        st.write("### 🎛️ Handmatige Controle")
+        manual_blocks = st.slider("Aantal banen (resolutie)", 10, 500, 100)
+        manual_seed = st.slider("Patroon Wisselaar (Seed)", 1, 1000, 42)
+        if st.button("Pas Handmatig Toe"):
+            st.session_state.auto_mode = False
+            
     with col2:
-        random_seed = st.slider("Wissel het patroon (Seed)", 1, 200, 42)
-        
-    def apply_full_block_stretch(img_array, num_blocks, seed):
-        np.random.seed(seed)
-        h, w = img_array.shape[:2]
-        stretch_array = img_array.copy()
-        
-        # Zorg dat we niet meer banen vragen dan er pixels in de hoogte zijn
-        actual_blocks = min(num_blocks, h)
-        
-        # We verdelen de totale hoogte in 'actual_blocks' aaneengesloten stroken
-        if actual_blocks > 1:
-            y_splits = np.sort(np.random.choice(range(1, h), actual_blocks - 1, replace=False))
-            y_points = [0] + y_splits.tolist() + [h]
-        else:
-            y_points = [0, h]
+        st.write("### 🤖 Algoritme")
+        st.info("Laat de tool willekeurig de meest optimale waarden kiezen om 100% van de media te stretchen.")
+        # De gigantische AUTO knop
+        if st.button("✨ AUTO STRETCH ALLES", use_container_width=True):
+            st.session_state.auto_mode = True
+            # Genereer op de achtergrond extreme en willekeurige waarden
+            st.session_state.auto_blocks = random.randint(40, 450)
+            st.session_state.auto_seed = random.randint(1, 9999)
             
-        # Loop door elke strook van boven naar beneden
-        for i in range(len(y_points) - 1):
-            y_start = y_points[i]
-            y_end = y_points[i+1]
-            
-            # Kies een willekeurig startpunt op de X-as voor deze strook
-            x_start = np.random.randint(0, w)
-            
-            # Kies willekeurig of we naar links of naar rechts uitsmeren
-            direction = np.random.choice(["left", "right"])
-            
-            # Pak de pixelkolom
-            lijn_pixels = stretch_array[y_start:y_end, x_start:x_start+1]
-            
-            # Pas de stretch toe
-            if direction == "right":
-                stretch_array[y_start:y_end, x_start:] = lijn_pixels
-            else:
-                stretch_array[y_start:y_end, :x_start] = lijn_pixels
-                
-        return stretch_array
-
+    # Kijk welke waarden we moeten pakken: Auto of Handmatig?
+    active_blocks = st.session_state.auto_blocks if st.session_state.auto_mode else manual_blocks
+    active_seed = st.session_state.auto_seed if st.session_state.auto_mode else manual_seed
+    
+    st.divider()
+    
     if not is_video:
         # --- FOTO VERWERKING ---
         image = Image.open(uploaded_file).convert('RGB')
         img_array = np.array(image)
         
-        # Voer ons nieuwe, volledige dekkende effect uit
-        stretch_array = apply_full_block_stretch(img_array, num_blocks, random_seed)
+        result_array = apply_repponen_stretch(img_array, active_blocks, active_seed)
+        result_image = Image.fromarray(result_array)
         
-        result_image = Image.fromarray(stretch_array)
-        st.image(result_image, caption='Jouw Full Time Stretch Kunstwerk', use_container_width=True)
+        st.image(result_image, caption=f"Huidig Resultaat (Banen: {active_blocks} | Seed: {active_seed})", use_container_width=True)
         
         buf = io.BytesIO()
         result_image.save(buf, format="PNG")
-        st.download_button("Download Foto (High-Res)", buf.getvalue(), "repponen_full_stretch.png", "image/png")
+        st.download_button("⬇️ Download High-Res Foto", buf.getvalue(), "auto_stretch.png", "image/png")
         
     else:
         # --- VIDEO VERWERKING ---
-        st.info("Video wordt frame-voor-frame verwerkt. Dit kan even duren...")
+        st.write(f"**Video Rendering Actief** (Banen: {active_blocks} | Seed: {active_seed})")
         
         tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
         tfile.write(uploaded_file.read())
@@ -96,27 +122,30 @@ if uploaded_file is not None:
         
         huidig_frame = 0
         progress_bar = st.progress(0)
+        status_text = st.empty()
         
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
-            
-            # Pas het effect toe op het huidige frame
-            bewerkt_frame = apply_full_block_stretch(frame, num_blocks, random_seed)
+                
+            bewerkt_frame = apply_repponen_stretch(frame, active_blocks, active_seed)
             out.write(bewerkt_frame)
             
             huidig_frame += 1
             if huidig_frame % 5 == 0 or huidig_frame == totaal_frames:
-                progress_bar.progress(min(huidig_frame / totaal_frames, 1.0))
+                voortgang = min(huidig_frame / totaal_frames, 1.0)
+                progress_bar.progress(voortgang)
+                status_text.text(f"Frame {huidig_frame} van {totaal_frames} verwerkt...")
                 
         cap.release()
         out.release()
         progress_bar.empty()
-        st.success("Video klaar!")
+        status_text.empty()
+        st.success("✅ Video succesvol gerenderd!")
         
         with open(out_file.name, 'rb') as v:
-            st.download_button("Download Bewerkte Video", v.read(), "repponen_video_full_stretch.mp4", "video/mp4")
+            st.download_button("⬇️ Download Bewerkte Video", v.read(), "auto_stretch_video.mp4", "video/mp4")
             
         os.unlink(tfile.name)
         os.unlink(out_file.name)
