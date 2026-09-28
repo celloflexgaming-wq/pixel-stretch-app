@@ -9,48 +9,70 @@ import os
 # Maakt de website lekker breed
 st.set_page_config(page_title="Anton Repponen Effect", layout="wide")
 
-st.title("Anton Repponen: Pixel Stretch")
-st.write("Sleep een foto of video in het vlak hieronder. Het effect wordt direct berekend!")
+st.title("Anton Repponen: Randomized Blocks")
+st.write("Sleep een foto of video in het vlak. Gebruik de sliders om de blokken aan te passen!")
 
-# 1. Het drag & drop vlak voor zowel foto's als video's
+# Het drag & drop vlak
 uploaded_file = st.file_uploader("", type=["jpg", "jpeg", "png", "mp4", "mov"])
 
 if uploaded_file is not None:
-    # We kijken of de gebruiker een video of een foto heeft geüpload
     is_video = uploaded_file.type.startswith('video')
     
-    # 2. De slider die direct reageert (automatisch verwerken!)
-    st.write("### Bepaal het startpunt van de stretch")
-    stretch_percentage = st.slider("Startpunt (in % van de breedte)", 0, 100, 50)
-    
+    # Twee nieuwe sliders voor het blokken-effect
+    col1, col2 = st.columns(2)
+    with col1:
+        num_blocks = st.slider("Aantal horizontale blokken", 1, 150, 40)
+    with col2:
+        # De 'seed' zorgt ervoor dat we de willekeurigheid kunnen veranderen tot we het mooi vinden
+        random_seed = st.slider("Wissel het patroon (Seed)", 1, 100, 42)
+        
+    def apply_block_stretch(img_array, num_blocks, seed):
+        # We stellen de willekeurigheid in op een vast getal (seed). 
+        # Hierdoor blijven de blokken in een video op precies dezelfde plek per frame!
+        np.random.seed(seed)
+        
+        h, w = img_array.shape[:2]
+        stretch_array = img_array.copy()
+        
+        for _ in range(num_blocks):
+            # 1. Kies een willekeurige start-hoogte (Y-as)
+            y_start = np.random.randint(0, h)
+            
+            # 2. Kies een willekeurige dikte voor het blok
+            block_height = np.random.randint(10, max(20, h // 8))
+            y_end = min(h, y_start + block_height)
+            
+            # 3. Kies waar de pixel-lijn begint (X-as). 
+            # We houden hem in de linker 80% zodat er ruimte is om te stretchen.
+            x_start = np.random.randint(0, int(w * 0.8))
+            
+            # Pak deze specifieke reeks pixels
+            lijn_pixels = stretch_array[y_start:y_end, x_start:x_start+1]
+            
+            # Smeer deze uit naar de rechterkant van het beeld
+            stretch_array[y_start:y_end, x_start:] = lijn_pixels
+            
+        return stretch_array
+
     if not is_video:
         # --- FOTO VERWERKING ---
-        image = Image.open(uploaded_file)
+        image = Image.open(uploaded_file).convert('RGB')
         img_array = np.array(image)
-        hoogte, breedte = img_array.shape[:2]
         
-        # Bereken exact de pixel waar we moeten stretchen o.b.v. het percentage
-        start_x = int((stretch_percentage / 100) * (breedte - 1))
+        # Voer ons nieuwe blokken-effect uit
+        stretch_array = apply_block_stretch(img_array, num_blocks, random_seed)
         
-        # Voer de pixel stretch uit
-        stretch_array = img_array.copy()
-        lijn_pixels = stretch_array[:, start_x:start_x+1]
-        stretch_array[:, start_x:] = lijn_pixels
-        
-        # Toon het resultaat in hoge resolutie - NU MET DE JUISTE STREAMLIT CODE
         result_image = Image.fromarray(stretch_array)
-        st.image(result_image, caption='Jouw Kunstwerk', use_container_width=True)
+        st.image(result_image, caption='Jouw Randomized Block Kunstwerk', use_container_width=True)
         
-        # Knop om het in originele kwaliteit te downloaden
         buf = io.BytesIO()
         result_image.save(buf, format="PNG")
-        st.download_button("Download Foto (High-Res)", buf.getvalue(), "repponen_stretch.png", "image/png")
+        st.download_button("Download Foto (High-Res)", buf.getvalue(), "repponen_blocks.png", "image/png")
         
     else:
         # --- VIDEO VERWERKING ---
-        st.info("Video wordt frame-voor-frame verwerkt op de originele kwaliteit. Dit kan even duren...")
+        st.info("Video wordt frame-voor-frame verwerkt. Dit kan even duren...")
         
-        # Tijdelijke opslag voor de verwerking
         tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
         tfile.write(uploaded_file.read())
         
@@ -64,22 +86,19 @@ if uploaded_file is not None:
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(out_file.name, fourcc, fps, (breedte, hoogte))
         
-        start_x = int((stretch_percentage / 100) * (breedte - 1))
         huidig_frame = 0
         progress_bar = st.progress(0)
         
-        # Verwerk elk beeldje uit de video
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
             
-            lijn_pixels = frame[:, start_x:start_x+1]
-            frame[:, start_x:] = lijn_pixels
-            out.write(frame)
+            # Pas de blokken toe (dankzij de 'seed' gebeurt dit elk frame op exact dezelfde coördinaten)
+            bewerkt_frame = apply_block_stretch(frame, num_blocks, random_seed)
+            out.write(bewerkt_frame)
             
             huidig_frame += 1
-            # Update de laadbalk soepel
             if huidig_frame % 5 == 0 or huidig_frame == totaal_frames:
                 progress_bar.progress(min(huidig_frame / totaal_frames, 1.0))
                 
@@ -88,10 +107,8 @@ if uploaded_file is not None:
         progress_bar.empty()
         st.success("Video klaar!")
         
-        # Geef het gerenderde bestand terug aan de gebruiker
         with open(out_file.name, 'rb') as v:
-            st.download_button("Download Bewerkte Video", v.read(), "repponen_video.mp4", "video/mp4")
+            st.download_button("Download Bewerkte Video", v.read(), "repponen_video_blocks.mp4", "video/mp4")
             
-        # Ruim tijdelijke bestanden op
         os.unlink(tfile.name)
         os.unlink(out_file.name)
