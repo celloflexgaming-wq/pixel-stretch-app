@@ -7,33 +7,39 @@ import tempfile
 import os
 import random
 
-st.set_page_config(page_title="Anton Repponen Auto-Stretch", layout="wide")
+st.set_page_config(page_title="Anton Repponen Block-Stretch", layout="wide")
 
-st.title("Anton Repponen: 100% Full Stretch")
-st.write("Upload media. De hele afbeelding wordt nu 100% bedekt met het time stretch effect, zonder reststukjes.")
+st.title("Anton Repponen: Randomized Block Stretch")
+st.write("Upload media. De afbeelding wordt opgedeeld in rijen en willekeurige segmenten, waarna specifieke blokken worden gestretcht voor dat typische verspringende effect.")
 
 # Geheugen voor de AUTO modus
 if 'auto_mode' not in st.session_state:
     st.session_state.auto_mode = False
-if 'auto_blocks' not in st.session_state:
-    st.session_state.auto_blocks = 100
+if 'auto_rows' not in st.session_state:
+    st.session_state.auto_rows = 50
+if 'auto_complexity' not in st.session_state:
+    st.session_state.auto_complexity = 5
+if 'auto_stretch_chance' not in st.session_state:
+    st.session_state.auto_stretch_chance = 70
 if 'auto_seed' not in st.session_state:
     st.session_state.auto_seed = 42
 
 uploaded_file = st.file_uploader("Upload een foto of video...", type=["jpg", "jpeg", "png", "mp4", "mov"])
 
-# --- VERNIEUWDE FUNCTIE VOOR 100% DEKKING ---
-def apply_repponen_stretch(img_array, num_blocks, seed):
+# --- HET GEAVANCEERDE BLOKKEN ALGORITME ---
+def apply_complex_block_stretch(img_array, num_rows, complexity, stretch_chance, seed):
     np.random.seed(seed)
+    random.seed(seed) # Zorg dat ook pythons random module vastligt voor video's
     h, w = img_array.shape[:2]
     
-    # We beginnen met een leeg canvas (optioneel) of een kopie
-    stretch_array = img_array.copy()
+    # We werken op een kopie zodat we delen intact kunnen laten
+    result_array = img_array.copy()
     
-    actual_blocks = min(num_blocks, h)
+    actual_rows = min(num_rows, h)
     
-    if actual_blocks > 1:
-        y_splits = np.sort(np.random.choice(range(1, h), actual_blocks - 1, replace=False))
+    # Bepaal de horizontale uitsnedes (rijen)
+    if actual_rows > 1:
+        y_splits = np.sort(np.random.choice(range(1, h), actual_rows - 1, replace=False))
         y_points = [0] + y_splits.tolist() + [h]
     else:
         y_points = [0, h]
@@ -42,17 +48,34 @@ def apply_repponen_stretch(img_array, num_blocks, seed):
         y_start = y_points[i]
         y_end = y_points[i+1]
         
-        # Kies de bron-pixel op de X-as voor deze hele baan
-        x_start = np.random.randint(0, w)
+        # Voor elke rij, bepaal hoeveel kolommen (segmenten) deze rij krijgt.
+        # 'complexity' bepaalt het maximale aantal segmenten per rij.
+        num_segments = np.random.randint(1, max(2, complexity + 1))
         
-        # Pak exact deze pixel-kolom uit de ORIGINELE foto
-        lijn_pixels = img_array[y_start:y_end, x_start:x_start+1]
-        
-        # OPLOSSING: Overschrijf de VOLLEDIGE breedte van de baan (alle X-coördinaten)
-        # Er blijven nu geen originele stukjes meer over.
-        stretch_array[y_start:y_end, :] = lijn_pixels
+        if num_segments > 1:
+             x_splits = np.sort(np.random.choice(range(1, w), num_segments - 1, replace=False))
+             x_points = [0] + x_splits.tolist() + [w]
+        else:
+             x_points = [0, w]
+             
+        # Loop door elk segment binnen deze rij
+        for j in range(len(x_points) - 1):
+            x_start = x_points[j]
+            x_end = x_points[j+1]
             
-    return stretch_array
+            # Bepaal of we dit specifieke blokje gaan stretchen of intact laten
+            if random.randint(1, 100) <= stretch_chance:
+                # We gaan stretchen!
+                # Kies willekeurig een pixelkolom BINNEN dit segment om uit te smeren
+                pixel_x = np.random.randint(x_start, x_end)
+                lijn_pixels = img_array[y_start:y_end, pixel_x:pixel_x+1]
+                
+                # Overschrijf dit segment met de gekozen pixel
+                result_array[y_start:y_end, x_start:x_end] = lijn_pixels
+            
+            # Als de kans niet valt, doen we niets en blijft het originele stukje foto (of videoframe) staan.
+
+    return result_array
 
 if uploaded_file is not None:
     is_video = uploaded_file.type.startswith('video')
@@ -61,20 +84,28 @@ if uploaded_file is not None:
     
     with col1:
         st.write("### 🎛️ Handmatige Controle")
-        manual_blocks = st.slider("Aantal banen (resolutie)", 10, 500, 100)
+        manual_rows = st.slider("Aantal Rijen (Hoogte)", 10, 200, 50, help="Hoeveel horizontale stroken er gemaakt worden.")
+        manual_complexity = st.slider("Complexiteit (Blokjes per rij)", 1, 20, 5, help="Hoe meer, hoe vaker een rij verspringt.")
+        manual_stretch_chance = st.slider("Kans op Stretch (%)", 0, 100, 70, help="100% is alles gestretcht, 0% is de originele foto.")
         manual_seed = st.slider("Patroon Wisselaar (Seed)", 1, 1000, 42)
+        
         if st.button("Pas Handmatig Toe"):
             st.session_state.auto_mode = False
             
     with col2:
-        st.write("### 🤖 Algoritme")
-        st.info("Genereert direct willekeurige waarden voor totale deconstructie.")
-        if st.button("✨ AUTO STRETCH ALLES", use_container_width=True):
+        st.write("### 🤖 AUTO Modus")
+        st.info("Genereert een compleet willekeurig blokkenpatroon.")
+        if st.button("✨ AUTO GENERATE BLOCKS", use_container_width=True):
             st.session_state.auto_mode = True
-            st.session_state.auto_blocks = random.randint(40, 450)
+            st.session_state.auto_rows = random.randint(30, 150)
+            st.session_state.auto_complexity = random.randint(3, 12)
+            # We houden de kans redelijk hoog (tussen 60 en 95) voor een goed effect
+            st.session_state.auto_stretch_chance = random.randint(60, 95) 
             st.session_state.auto_seed = random.randint(1, 9999)
             
-    active_blocks = st.session_state.auto_blocks if st.session_state.auto_mode else manual_blocks
+    active_rows = st.session_state.auto_rows if st.session_state.auto_mode else manual_rows
+    active_complexity = st.session_state.auto_complexity if st.session_state.auto_mode else manual_complexity
+    active_chance = st.session_state.auto_stretch_chance if st.session_state.auto_mode else manual_stretch_chance
     active_seed = st.session_state.auto_seed if st.session_state.auto_mode else manual_seed
     
     st.divider()
@@ -84,18 +115,18 @@ if uploaded_file is not None:
         image = Image.open(uploaded_file).convert('RGB')
         img_array = np.array(image)
         
-        result_array = apply_repponen_stretch(img_array, active_blocks, active_seed)
+        result_array = apply_complex_block_stretch(img_array, active_rows, active_complexity, active_chance, active_seed)
         result_image = Image.fromarray(result_array)
         
-        st.image(result_image, caption=f"Huidig Resultaat (Banen: {active_blocks} | Seed: {active_seed})", use_container_width=True)
+        st.image(result_image, caption=f"Resultaat (Rijen: {active_rows} | Complexiteit: {active_complexity} | Stretch: {active_chance}%)", use_container_width=True)
         
         buf = io.BytesIO()
         result_image.save(buf, format="PNG")
-        st.download_button("⬇️ Download High-Res Foto", buf.getvalue(), "auto_stretch_100.png", "image/png")
+        st.download_button("⬇️ Download High-Res Foto", buf.getvalue(), "repponen_blocks.png", "image/png")
         
     else:
         # --- VIDEO VERWERKING ---
-        st.write(f"**Video Rendering Actief** (Banen: {active_blocks} | Seed: {active_seed})")
+        st.write(f"**Video Rendering Actief** (Rijen: {active_rows} | Complexiteit: {active_complexity} | Stretch: {active_chance}%)")
         
         tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
         tfile.write(uploaded_file.read())
@@ -119,7 +150,7 @@ if uploaded_file is not None:
             if not ret:
                 break
                 
-            bewerkt_frame = apply_repponen_stretch(frame, active_blocks, active_seed)
+            bewerkt_frame = apply_complex_block_stretch(frame, active_rows, active_complexity, active_chance, active_seed)
             out.write(bewerkt_frame)
             
             huidig_frame += 1
@@ -134,7 +165,7 @@ if uploaded_file is not None:
         st.success("✅ Video succesvol gerenderd!")
         
         with open(out_file.name, 'rb') as v:
-            st.download_button("⬇️ Download Bewerkte Video", v.read(), "auto_stretch_100_video.mp4", "video/mp4")
+            st.download_button("⬇️ Download Bewerkte Video", v.read(), "repponen_video_blocks.mp4", "video/mp4")
             
         os.unlink(tfile.name)
         os.unlink(out_file.name)
