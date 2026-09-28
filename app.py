@@ -9,8 +9,8 @@ import os
 # Maakt de website lekker breed
 st.set_page_config(page_title="Anton Repponen Effect", layout="wide")
 
-st.title("Anton Repponen: Randomized Blocks")
-st.write("Sleep een foto of video in het vlak. Gebruik de sliders om de blokken aan te passen!")
+st.title("Anton Repponen: Full Time Stretch")
+st.write("Sleep een foto of video in het vlak. De hele afbeelding wordt in uitgesmeerde banen verdeeld!")
 
 # Het drag & drop vlak
 uploaded_file = st.file_uploader("", type=["jpg", "jpeg", "png", "mp4", "mov"])
@@ -18,40 +18,48 @@ uploaded_file = st.file_uploader("", type=["jpg", "jpeg", "png", "mp4", "mov"])
 if uploaded_file is not None:
     is_video = uploaded_file.type.startswith('video')
     
-    # Twee nieuwe sliders voor het blokken-effect
+    # Sliders voor het blokken-effect
     col1, col2 = st.columns(2)
     with col1:
-        num_blocks = st.slider("Aantal horizontale blokken", 1, 150, 40)
+        num_blocks = st.slider("Aantal horizontale banen (resolutie)", 10, 300, 80)
     with col2:
-        # De 'seed' zorgt ervoor dat we de willekeurigheid kunnen veranderen tot we het mooi vinden
-        random_seed = st.slider("Wissel het patroon (Seed)", 1, 100, 42)
+        random_seed = st.slider("Wissel het patroon (Seed)", 1, 200, 42)
         
-    def apply_block_stretch(img_array, num_blocks, seed):
-        # We stellen de willekeurigheid in op een vast getal (seed). 
-        # Hierdoor blijven de blokken in een video op precies dezelfde plek per frame!
+    def apply_full_block_stretch(img_array, num_blocks, seed):
         np.random.seed(seed)
-        
         h, w = img_array.shape[:2]
         stretch_array = img_array.copy()
         
-        for _ in range(num_blocks):
-            # 1. Kies een willekeurige start-hoogte (Y-as)
-            y_start = np.random.randint(0, h)
+        # Zorg dat we niet meer banen vragen dan er pixels in de hoogte zijn
+        actual_blocks = min(num_blocks, h)
+        
+        # We verdelen de totale hoogte in 'actual_blocks' aaneengesloten stroken
+        if actual_blocks > 1:
+            y_splits = np.sort(np.random.choice(range(1, h), actual_blocks - 1, replace=False))
+            y_points = [0] + y_splits.tolist() + [h]
+        else:
+            y_points = [0, h]
             
-            # 2. Kies een willekeurige dikte voor het blok
-            block_height = np.random.randint(10, max(20, h // 8))
-            y_end = min(h, y_start + block_height)
+        # Loop door elke strook van boven naar beneden
+        for i in range(len(y_points) - 1):
+            y_start = y_points[i]
+            y_end = y_points[i+1]
             
-            # 3. Kies waar de pixel-lijn begint (X-as). 
-            # We houden hem in de linker 80% zodat er ruimte is om te stretchen.
-            x_start = np.random.randint(0, int(w * 0.8))
+            # Kies een willekeurig startpunt op de X-as voor deze strook
+            x_start = np.random.randint(0, w)
             
-            # Pak deze specifieke reeks pixels
+            # Kies willekeurig of we naar links of naar rechts uitsmeren
+            direction = np.random.choice(["left", "right"])
+            
+            # Pak de pixelkolom
             lijn_pixels = stretch_array[y_start:y_end, x_start:x_start+1]
             
-            # Smeer deze uit naar de rechterkant van het beeld
-            stretch_array[y_start:y_end, x_start:] = lijn_pixels
-            
+            # Pas de stretch toe
+            if direction == "right":
+                stretch_array[y_start:y_end, x_start:] = lijn_pixels
+            else:
+                stretch_array[y_start:y_end, :x_start] = lijn_pixels
+                
         return stretch_array
 
     if not is_video:
@@ -59,15 +67,15 @@ if uploaded_file is not None:
         image = Image.open(uploaded_file).convert('RGB')
         img_array = np.array(image)
         
-        # Voer ons nieuwe blokken-effect uit
-        stretch_array = apply_block_stretch(img_array, num_blocks, random_seed)
+        # Voer ons nieuwe, volledige dekkende effect uit
+        stretch_array = apply_full_block_stretch(img_array, num_blocks, random_seed)
         
         result_image = Image.fromarray(stretch_array)
-        st.image(result_image, caption='Jouw Randomized Block Kunstwerk', use_container_width=True)
+        st.image(result_image, caption='Jouw Full Time Stretch Kunstwerk', use_container_width=True)
         
         buf = io.BytesIO()
         result_image.save(buf, format="PNG")
-        st.download_button("Download Foto (High-Res)", buf.getvalue(), "repponen_blocks.png", "image/png")
+        st.download_button("Download Foto (High-Res)", buf.getvalue(), "repponen_full_stretch.png", "image/png")
         
     else:
         # --- VIDEO VERWERKING ---
@@ -94,8 +102,8 @@ if uploaded_file is not None:
             if not ret:
                 break
             
-            # Pas de blokken toe (dankzij de 'seed' gebeurt dit elk frame op exact dezelfde coördinaten)
-            bewerkt_frame = apply_block_stretch(frame, num_blocks, random_seed)
+            # Pas het effect toe op het huidige frame
+            bewerkt_frame = apply_full_block_stretch(frame, num_blocks, random_seed)
             out.write(bewerkt_frame)
             
             huidig_frame += 1
@@ -108,7 +116,7 @@ if uploaded_file is not None:
         st.success("Video klaar!")
         
         with open(out_file.name, 'rb') as v:
-            st.download_button("Download Bewerkte Video", v.read(), "repponen_video_blocks.mp4", "video/mp4")
+            st.download_button("Download Bewerkte Video", v.read(), "repponen_video_full_stretch.mp4", "video/mp4")
             
         os.unlink(tfile.name)
         os.unlink(out_file.name)
