@@ -27,7 +27,7 @@ if uploaded_file is not None:
         # --- FOTO VERWERKING ---
         image = Image.open(uploaded_file)
         img_array = np.array(image)
-        hoogte, breedte, kanalen = img_array.shape
+        hoogte, breedte = img_array.shape[:2]
         
         # Bereken exact de pixel waar we moeten stretchen o.b.v. het percentage
         start_x = int((stretch_percentage / 100) * (breedte - 1))
@@ -37,9 +37,9 @@ if uploaded_file is not None:
         lijn_pixels = stretch_array[:, start_x:start_x+1]
         stretch_array[:, start_x:] = lijn_pixels
         
-        # Toon het resultaat in hoge resolutie
+        # Toon het resultaat in hoge resolutie - NU MET DE JUISTE STREAMLIT CODE
         result_image = Image.fromarray(stretch_array)
-        st.image(result_image, caption='Jouw Kunstwerk', use_column_width=True)
+        st.image(result_image, caption='Jouw Kunstwerk', use_container_width=True)
         
         # Knop om het in originele kwaliteit te downloaden
         buf = io.BytesIO()
